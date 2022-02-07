@@ -1,0 +1,302 @@
+---
+title: 'Project 1: History of Philosophy'
+author: "Kexin Tang"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+<br>
+<br>
+
+### Introduction 
+
+This report aims to explore the features, differences or similarities of texts of philosophers or philosophy schools using several different methodologies. 
+<br>
+<br>
+**Install and load libraries: **
+```{r, message=FALSE, warning=FALSE}
+packages.used <- c("tidyverse", "tm", "wordcloud", "RColorBrewer", "tidytext",
+                "ggplot2", "knitr", "sentimentr", "syuzhet", "stringr", "sqldf", 
+                "gplots", "factoextra")
+packages.needed <- setdiff(packages.used, 
+                        intersect(installed.packages()[,1], 
+                                  packages.used))
+if(length(packages.needed)>0){
+  install.packages(packages.needed, dependencies = TRUE,
+                   repos='http://cran.us.r-project.org')
+}
+
+library(tidyverse)
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+library(tidytext)
+library(ggplot2)
+library(knitr)
+library(sentimentr)
+library(syuzhet)
+library(stringr)
+library(sqldf)
+library(gplots)
+library(factoextra)
+source("../lib/wordcloud_function.R")
+source("../lib/emo_fn_plot.R")
+```
+
+<br>
+<br>
+
+### Wordcloud part 
+
+**Explore the most frequently used words in the overall texts: **
+```{r, message=FALSE, warning=FALSE}
+ph <- read.csv("../data/philosophy_data.csv", header = TRUE)
+ph_cor <- Corpus(VectorSource(ph$tokenized_txt))
+ph_tidy <- ph_cor %>% 
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeWords, c("one", "will", "must", "can", "since", "just", "yet", "might", "however", "two", "may", stopwords("english"))) %>%
+  tm_map(stripWhitespace) %>%
+  TermDocumentMatrix() %>% 
+  tidy()
+ph_overall <- ph_tidy %>% 
+  group_by(term) %>% 
+  summarise(frequency = sum(count)) %>% 
+  arrange(desc(frequency))
+kable(ph_overall[1:10,])
+```
+Above are the top 10 frequent words in the overall texts.
+
+<br>
+<br>
+
+**Inspect an overall wordcloud: **
+```{r, fig.height=6, fig.width=6, message=FALSE, warning=FALSE}
+wordcloud(ph_overall$term, ph_overall$frequency,
+          scale = c(3,0.1),
+          max.words = 150,
+          min.freq = 1,
+          random.order = FALSE,
+          rot.per = 0.35,
+          random.color = FALSE,
+          colors=brewer.pal(12,"Paired"))
+```
+<br>
+We can see that there are words like "things", "nature", "human", "knowledge", "ideas", "subject", etc. 
+
+<br>
+
+**Identify interesting words for each sentence. Compute TF-IDF weighted document-term matrices and generate wordcloud based on [TF-IDF]. **
+```{r, fig.height=6, fig.width=6, message=FALSE, warning=FALSE}
+ph_all <- ph_cor %>% 
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeWords, c("one", "will", "must", "can", "since", "just", "yet", "might", "however", "two", "may", stopwords("english"))) %>%
+  tm_map(stripWhitespace) 
+ph_dtm <- DocumentTermMatrix(ph_all,
+                          control = list(weighting = function(x) weightTfIdf(x,normalize=FALSE)))
+ph_dtm = removeSparseTerms(ph_dtm , 0.99)
+ph_dtm_tidy <- tidy(ph_dtm)
+freq <- sqldf("select term, sum(count) as ct
+      from ph_dtm_tidy
+      group by term
+      order by sum(count) desc")
+wordcloud(freq$term, freq$ct,
+          scale = c(3,0.1),
+          max.words = 100,
+          min.freq = 1,
+          random.order = FALSE,
+          rot.per = 0.3,
+          random.color = FALSE,
+          colors=brewer.pal(12,"Accent"))
+```
+<br>
+There are words like "god", "know", "nature", "true", "think", "power", "mind", "life", "existence", "subject", "knowledge", etc. We know that philosophy is a study of general and fundamental questions, such as life, mind, knowledge, or other abstract topics.
+
+<br>
+
+**Inspect wordcloud of each school of philosophy, compare them.**
+```{r, message=FALSE, warning=FALSE}
+ph_school <- ph %>% split(.$school)
+```
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,2))
+wordcloud_fn(ph_school[1], names(ph_school[1]), "Dark2")
+wordcloud_fn(ph_school[2], names(ph_school[2]), "Blues")
+wordcloud_fn(ph_school[3], names(ph_school[3]), "Reds")
+wordcloud_fn(ph_school[4], names(ph_school[4]), "PuOr")
+wordcloud_fn(ph_school[5], names(ph_school[5]), "BuGn")
+wordcloud_fn(ph_school[6], names(ph_school[6]), "Set2")
+wordcloud_fn(ph_school[7], names(ph_school[7]), "RdGy")
+wordcloud_fn(ph_school[8], names(ph_school[8]), "PiYG")
+wordcloud_fn(ph_school[9], names(ph_school[9]), "BrBG")
+wordcloud_fn(ph_school[10], names(ph_school[10]), "Oranges")
+wordcloud_fn(ph_school[11], names(ph_school[11]), "Spectral")
+wordcloud_fn(ph_school[12], names(ph_school[12]), "RdYlBu")
+par(mfrow=c(1,1))
+wordcloud_fn(ph_school[13], names(ph_school[13]), "RdYlGn")
+```
+<br>
+We can see that each different philosophy schools has obviously different key words. 
+For example, for capitalism, there are "price", "money", "quantity", "wages", "tax", "trade", "goods", "expense", "market", which makes sense. 
+And for feminism, there are "women", "woman", "freedom", "role", "mind", "work", "rights", "slave", "white", "black", which also makes sense. 
+There are also some similarities among those different schools. Almost all of them contains words like "mind", "things", "nature", "people", "god", which are some features of philosophy study. 
+
+<br>
+<br>
+
+### Explore the emotions
+
+We can see that there are some authors in the same school. I'm curious that if authors in the same school have similar patterns of emotions in their sentences, as well as sentence length variation.
+Let's choose the school of analytic to analyze. 
+```{r}
+sqldf("select DISTINCT school, author
+      from ph 
+      order by school")
+```
+
+```{r}
+ph_analytic <- ph_school$analytic
+word_count <- str_count(ph_analytic$sentence_str, "\\w+")
+emo_analytic <- diag(1/(word_count+0.01)) %*%  as.matrix(get_nrc_sentiment(ph_analytic$sentence_str))
+ph_emo_ana <- cbind(ph_analytic[ ,1:5], word_count, emo_analytic)
+ph_emo_ana <- sqldf(
+"select *, row_number() over(partition by author) as sent_id
+      from ph_emo_ana
+      order by author"
+)
+```
+
+```{r}
+par(mfrow=c(2,1), mar=c(1,0,2,0), bty="n", xaxt="n", yaxt="n", font.main=1)
+emo_fn(df_a = ph_emo_ana, author_v = "Russell", author = "Russell")
+emo_fn(df_a = ph_emo_ana, author_v = "Moore", author = "Moore")
+emo_fn(df_a = ph_emo_ana, author_v = "Wittgenstein", author = "Wittgenstein")
+emo_fn(df_a = ph_emo_ana, author_v = "Lewis", author = "Lewis")
+emo_fn(df_a = ph_emo_ana, author_v = "Quine", author = "Quine")
+emo_fn(df_a = ph_emo_ana, author_v = "Popper", author = "Popper")
+emo_fn(df_a = ph_emo_ana, author_v = "Kripke", author = "Kripke")
+
+```
+<br>
+As we can see from above plots, the authors have some similarities in emotions. There are only very small part of orange (disgust) and yellow(sadness) lines in all plots. 
+They also have some different changes of emotions. Like for Wittgenstein, there are many red lines (anger); and for Popper, there are many light green (anticipation) lines; for Quine, there are many dark green (trust) lines.
+For change of sentence length, there are also some differences among those authors of analytic school. Wittgenstein, Lewis, and Moore seem to have more changes of sentence length than the others.
+
+<br>
+<br>
+
+### Clustering of emotions
+
+```{r}
+heatmap.2(cor(ph_emo_ana %>% select(anger:trust)), 
+          scale = "none", 
+          col = bluered(100), margin=c(6, 6), key=F,
+          trace = "none", density.info = "none")
+```
+<br>
+<br>
+If I choose authors from several different schools, will the authors from the same school be clustered together? This is a very interesting test.
+I choose authors from analytic, capitalism, feminism and empiricism.
+```{r}
+ph_capital <- ph_school$capitalism
+word_count_cap <- str_count(ph_capital$sentence_str, "\\w+")
+emo_capital <- diag(1/(word_count_cap+0.01)) %*% as.matrix(get_nrc_sentiment(ph_capital$sentence_str))
+ph_emo_cap <- cbind(ph_capital[ ,1:5], emo_capital)
+
+ph_feminism <- ph_school$feminism
+word_count_fem <- str_count(ph_feminism$sentence_str, "\\w+")
+emo_feminism <- diag(1/(word_count_fem+0.01)) %*% as.matrix(get_nrc_sentiment(ph_feminism$sentence_str))
+ph_emo_fem <- cbind(ph_feminism[ ,1:5], emo_feminism)
+
+ph_empiricism <- ph_school$empiricism
+word_count_emp <- str_count(ph_empiricism$sentence_str, "\\w+")
+emo_empiricism <- diag(1/(word_count_emp+0.01)) %*% as.matrix(get_nrc_sentiment(ph_empiricism$sentence_str))
+ph_emo_emp <- cbind(ph_empiricism[ ,1:5], emo_empiricism)
+
+ph_emo_all <- rbind(ph_emo_ana[,c(-6,-17)], ph_emo_cap, ph_emo_fem, ph_emo_emp)
+```
+
+<br>
+
+
+**Summary of emotions for each of the four school: **
+```{r}
+par(mfrow=c(2,2), mar=c(4, 6, 2, 1))
+col.use=c("red2", "darkgoldenrod1", 
+            "chartreuse3", "blueviolet",
+            "darkgoldenrod2", "dodgerblue3", 
+            "darkgoldenrod1", "darkgoldenrod1")
+emo_means_ana=colMeans(select(ph_emo_ana, anger:trust)>0.01)
+barplot(emo_means_ana[order(emo_means_ana)], las=2, col=col.use[order(emo_means_ana)], horiz=T, main = "analytic")
+emo_means_cap=colMeans(select(ph_emo_cap, anger:trust)>0.01)
+barplot(emo_means_cap[order(emo_means_cap)], las=2, col=col.use[order(emo_means_cap)], horiz=T, main = "capitalism")
+emo_means_fem=colMeans(select(ph_emo_fem, anger:trust)>0.01)
+barplot(emo_means_fem[order(emo_means_fem)], las=2, col=col.use[order(emo_means_fem)], horiz=T, main = "feminism")
+emo_means_emp=colMeans(select(ph_emo_emp, anger:trust)>0.01)
+barplot(emo_means_emp[order(emo_means_emp)], las=2, col=col.use[order(emo_means_emp)], horiz=T, main = "empiricism")
+```
+<br>
+It seems that the emotions of the 4 different schools are pretty similar based on means. The top 2 most outstanding emotions for all these schools are trust and anticipation, which are positive. 
+
+<br>
+
+#### Clustering
+```{r}
+set.seed(1)
+emo_summary <- tbl_df(ph_emo_all) %>% 
+  group_by(author) %>% 
+  summarise(
+    anger=mean(anger),
+    anticipation=mean(anticipation),
+    disgust=mean(disgust),
+    fear=mean(fear),
+    joy=mean(joy),
+    sadness=mean(sadness),
+    surprise=mean(surprise),
+    trust=mean(trust)
+  )
+emo_summary <- as.data.frame(emo_summary)
+rownames(emo_summary) <- as.character((emo_summary[,1]))
+km <- kmeans(emo_summary[,-1], iter.max=200, 4)
+fviz_cluster(km, 
+             stand=F, repel= TRUE,
+             data = emo_summary[, -1], xlab="", xaxt="n", ylab = "",
+             show.clust.cent=FALSE)
+sqldf("select DISTINCT school, author
+      from ph 
+      where school in ('analytic', 'capitalism', 'feminism', 'empiricism')
+      order by school")
+```
+We can see that the authors belonging to school of feminism (Wollstonecraft, Beauvoir, Davis) are clustered together. Moore, Quine and Popper who belong to school of analytic are clustered together. However, the other authors of school of analytic, capitalism and empiricism are mixed and are not clustered by their schools clearly. 
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
